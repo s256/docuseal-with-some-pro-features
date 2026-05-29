@@ -5,6 +5,7 @@ class NotificationsSettingsController < ApplicationController
   before_action :load_reminder_config, only: :index
   before_action :load_pending_reminders, only: :index
   before_action :load_paperless_status, only: :index
+  before_action :load_twenty_status, only: :index
   authorize_resource :bcc_config, only: :index
   authorize_resource :reminder_config, only: :index
 
@@ -77,6 +78,12 @@ class NotificationsSettingsController < ApplicationController
   def load_paperless_status
     @paperless_status = Rails.cache.fetch('paperless_ngx_health_check', expires_in: 60.seconds) do
       Submissions::UploadToPaperless.health_check
+    end
+  end
+
+  def load_twenty_status
+    @twenty_status = Rails.cache.fetch('twenty_crm_health_check', expires_in: 60.seconds) do
+      Submissions::UploadToTwenty.health_check
     end
   end
 

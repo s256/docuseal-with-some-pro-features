@@ -1,0 +1,28 @@
+<div class="mt-8 mb-4">
+  <h2 class="text-3xl font-bold mb-4">
+    Twenty CRM
+  </h2>
+  <div class="flex items-center space-x-3">
+    <% if !@twenty_status[:configured] %>
+      <span class="badge badge-ghost">Not Configured</span>
+      <span class="text-sm opacity-70">
+        Set TWENTY_CRM_URL, TWENTY_CRM_API_KEY, and TWENTY_CRM_FILE_FIELD_METADATA_ID environment variables to enable.
+      </span>
+    <% elsif @twenty_status[:reachable] %>
+      <span class="badge badge-success">Connected</span>
+      <span class="text-sm opacity-70">
+        <%= @twenty_status[:url] %>
+      </span>
+    <% else %>
+      <span class="badge badge-error">Unreachable</span>
+      <span class="text-sm opacity-70">
+        <%= @twenty_status[:url] %> — <%= @twenty_status[:error] %>
+      </span>
+    <% end %>
+  </div>
+  <% if @twenty_status[:configured] %>
+    <p class="text-sm opacity-70 mt-2">
+      Signed documents are automatically uploaded to Twenty CRM when all parties complete signing.
+    </p>
+  <% end %>
+</div>

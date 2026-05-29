@@ -79,6 +79,45 @@ Automatically upload completed, fully-signed documents to a [paperless-ngx](http
 
 The feature is inactive unless both variables are set.
 
+## Twenty CRM Integration
+
+Automatically attach completed, fully-signed documents to company records in [Twenty CRM](https://twenty.com/).
+
+**How it works:**
+- When a submission completes AND the submitter's metadata contains a `twenty_company_id`, the signed PDF and audit trail are uploaded to Twenty and linked to that company as attachments.
+- This is designed for workflows where Twenty initiates the signing (e.g., via a Twenty workflow that calls the DocuSeal API with the company ID in the submitter metadata).
+- If no `twenty_company_id` is present in any submitter's metadata, the upload is silently skipped. Other integrations (Paperless-ngx, email) are unaffected.
+- Uploads run as a background job with exponential retry (up to 10 attempts).
+
+**Configuration (env vars):**
+
+| Variable | Description |
+|----------|-------------|
+| `TWENTY_CRM_URL` | Base URL of your Twenty instance (e.g., `https://twenty.anothertech.company`) |
+| `TWENTY_CRM_API_KEY` | API key with attachment upload permissions (Settings > API & Webhooks) |
+| `TWENTY_CRM_FILE_FIELD_METADATA_ID` | The `file` field metadata ID on the Attachment object (see below) |
+
+The feature is inactive unless all three variables are set.
+
+**Finding the FILE_FIELD_METADATA_ID:**
+```bash
+curl -s -H "Authorization: Bearer YOUR_KEY" \
+  'https://your-twenty-instance/rest/metadata/objects' \
+  | jq '.data[] | select(.nameSingular=="attachment") | .fields[] | select(.name=="file") | .id'
+```
+
+**API payload (from your Twenty workflow):**
+```json
+{
+  "template_id": 123,
+  "submitters": [{
+    "role": "Signer",
+    "email": "contact@example.com",
+    "metadata": { "twenty_company_id": "uuid-of-the-company-in-twenty" }
+  }]
+}
+```
+
 ## What's NOT included
 
 These Pro features remain unavailable in this fork (they require significant UI/infrastructure work):
