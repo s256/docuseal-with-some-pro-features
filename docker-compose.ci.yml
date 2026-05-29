@@ -3,18 +3,24 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ci
+    volumes:
+      - .:/app
     command: sh -c "bundle exec rubocop && bundle exec erb_lint ./app && yarn eslint 'app/javascript/**/*.js'"
 
   brakeman:
     build:
       context: .
       dockerfile: Dockerfile.ci
+    volumes:
+      - .:/app
     command: bundle exec brakeman -q --exit-on-warn
 
   rspec:
     build:
       context: .
       dockerfile: Dockerfile.ci
+    volumes:
+      - .:/app
     command: sh -c "bundle exec rake db:create db:migrate && bundle exec rake assets:precompile && bundle exec rspec"
     depends_on:
       postgres:
