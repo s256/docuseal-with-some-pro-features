@@ -98,10 +98,11 @@ module Submissions
     def upload_document(attachment, company_id:, title:)
       blob = attachment.blob
       filename = sanitize_filename(blob.filename.to_s)
+      label = "#{title}.pdf"
 
       blob.open do |tempfile|
         file_id = upload_file(tempfile, filename)
-        create_attachment(file_id:, filename:, company_id:)
+        create_attachment(file_id:, label:, company_id:)
       end
     end
 
@@ -113,8 +114,11 @@ module Submissions
       field_metadata_id = ENV['TWENTY_CRM_FILE_FIELD_METADATA_ID'] # rubocop:disable Style/FetchEnvVar
       boundary = "----DocuSealTwentyUpload#{SecureRandom.hex(16)}"
 
+      gql = 'mutation UploadFilesFieldFile($file: Upload!, $fieldMetadataId: String!) ' \
+            '{ uploadFilesFieldFile(file: $file, fieldMetadataId: $fieldMetadataId) { id url } }'
+
       operations = {
-        query: 'mutation UploadFilesFieldFile($file: Upload!, $fieldMetadataId: String!) { uploadFilesFieldFile(file: $file, fieldMetadataId: $fieldMetadataId) { id url } }',
+        query: gql,
         variables: { file: nil, fieldMetadataId: field_metadata_id }
       }.to_json
 
@@ -138,16 +142,19 @@ module Submissions
       data = JSON.parse(response.body)
       file_id = data.dig('data', 'uploadFilesFieldFile', 'id')
 
-      raise UploadError, "Twenty CRM file upload returned no file ID: #{response.body.to_s.truncate(200)}" unless file_id
+      unless file_id
+        raise UploadError,
+              "Twenty CRM file upload returned no file ID: #{response.body.to_s.truncate(200)}"
+      end
 
       file_id
     end
 
-    def create_attachment(file_id:, filename:, company_id:)
+    def create_attachment(file_id:, label:, company_id:)
       body = {
-        name: filename,
+        name: label,
         targetCompanyId: company_id,
-        file: [{ fileId: file_id, label: filename }]
+        file: [{ fileId: file_id, label: label }]
       }
 
       response = connection.post('/rest/attachments') do |req|
