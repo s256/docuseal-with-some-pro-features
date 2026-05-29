@@ -24,6 +24,10 @@ class ProcessSubmitterCompletionJob
       if Submissions::UploadToPaperless.configured?
         UploadToPaperlessJob.perform_async('submission_id' => submitter.submission_id)
       end
+
+      if Submissions::UploadToTwenty.configured?
+        UploadToTwentyJob.perform_async('submission_id' => submitter.submission_id)
+      end
     end
 
     create_completed_documents!(submitter)
