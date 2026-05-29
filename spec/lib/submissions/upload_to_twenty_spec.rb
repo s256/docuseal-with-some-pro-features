@@ -11,6 +11,7 @@ RSpec.describe Submissions::UploadToTwenty do
   let(:twenty_url) { 'https://twenty.example.com' }
   let(:twenty_api_key) { 'test-api-key-abc123' }
   let(:twenty_field_metadata_id) { 'da73c92c-79e4-43d4-9a00-6ff2f37980c0' }
+  let(:company_id) { '550e8400-e29b-41d4-a716-446655440000' }
 
   before do
     submission.submitters.each_with_index do |submitter, i|
@@ -116,11 +117,13 @@ RSpec.describe Submissions::UploadToTwenty do
     let(:attachment_id) { 'attachment-uuid-456' }
 
     before do
+      upload_response = { data: { uploadFilesFieldFile: { id: file_id, url: 'https://cdn.example.com/file.pdf' } } }
       stub_request(:post, "#{twenty_url}/metadata")
-        .to_return(status: 200, body: { data: { uploadFilesFieldFile: { id: file_id, url: 'https://cdn.example.com/file.pdf' } } }.to_json)
+        .to_return(status: 200, body: upload_response.to_json)
 
+      attach_response = { data: { createAttachment: { id: attachment_id } } }
       stub_request(:post, "#{twenty_url}/rest/attachments")
-        .to_return(status: 201, body: { data: { createAttachment: { id: attachment_id } } }.to_json)
+        .to_return(status: 201, body: attach_response.to_json)
     end
 
     context 'when submitter has twenty_company_id in metadata' do
@@ -140,8 +143,8 @@ RSpec.describe Submissions::UploadToTwenty do
 
         expect(WebMock).to have_requested(:post, "#{twenty_url}/metadata")
           .with(headers: { 'Authorization' => "Bearer #{twenty_api_key}" })
-        expect(WebMock).to have_requested(:post, "#{twenty_url}/rest/attachments")
-          .with { |req| JSON.parse(req.body)['targetCompanyId'] == company_id }
+        expect(WebMock).to(have_requested(:post, "#{twenty_url}/rest/attachments")
+          .with { |req| JSON.parse(req.body)['targetCompanyId'] == company_id })
         expect(result).to include(attachment_id)
       end
     end
@@ -200,8 +203,8 @@ RSpec.describe Submissions::UploadToTwenty do
       it 'finds the company ID from any submitter' do
         result = described_class.call(submission)
 
-        expect(WebMock).to have_requested(:post, "#{twenty_url}/rest/attachments")
-          .with { |req| JSON.parse(req.body)['targetCompanyId'] == company_id }
+        expect(WebMock).to(have_requested(:post, "#{twenty_url}/rest/attachments")
+          .with { |req| JSON.parse(req.body)['targetCompanyId'] == company_id })
         expect(result).to be_present
       end
     end

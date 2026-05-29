@@ -24,14 +24,15 @@ RSpec.describe UploadToTwentyJob do
     allow(ENV).to receive(:[]).with('TWENTY_CRM_API_KEY').and_return(twenty_api_key)
     allow(ENV).to receive(:[]).with('TWENTY_CRM_FILE_FIELD_METADATA_ID').and_return(twenty_field_metadata_id)
 
-    stub_request(:get, %r{#{twenty_url}/rest/companies})
-      .to_return(status: 200, body: { data: [{ id: company_id, name: 'Acme Corp' }] }.to_json)
+    submission.submitters.first.update!(metadata: { 'twenty_company_id' => company_id })
 
+    upload_response = { data: { uploadFilesFieldFile: { id: 'file-123', url: 'https://cdn.example.com/file.pdf' } } }
     stub_request(:post, "#{twenty_url}/metadata")
-      .to_return(status: 200, body: { data: { uploadFilesFieldFile: { id: 'file-123', url: 'https://cdn.example.com/file.pdf' } } }.to_json)
+      .to_return(status: 200, body: upload_response.to_json)
 
+    attach_response = { data: { createAttachment: { id: 'attachment-456' } } }
     stub_request(:post, "#{twenty_url}/rest/attachments")
-      .to_return(status: 201, body: { id: 'attachment-456', name: 'document.pdf' }.to_json)
+      .to_return(status: 201, body: attach_response.to_json)
   end
 
   describe '#perform' do
