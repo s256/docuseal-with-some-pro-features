@@ -41,3 +41,7 @@ dump.rdb
 
 pd-data/*
 docuseal/*
+
+.claude/
+docs/*.md
+CLAUDE.md

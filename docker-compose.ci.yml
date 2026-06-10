@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile.ci
     volumes:
       - .:/app
+      - /app/node_modules
     command: sh -c "bundle exec rubocop && bundle exec erb_lint ./app && yarn eslint 'app/javascript/**/*.js'"
 
   brakeman:
@@ -13,6 +14,7 @@ services:
       dockerfile: Dockerfile.ci
     volumes:
       - .:/app
+      - /app/node_modules
     command: bundle exec brakeman -q --exit-on-warn
 
   rspec:
@@ -21,6 +23,7 @@ services:
       dockerfile: Dockerfile.ci
     volumes:
       - .:/app
+      - /app/node_modules
     command: sh -c "bundle exec rake db:create db:migrate && bundle exec rake assets:precompile && bundle exec rspec"
     depends_on:
       postgres:
