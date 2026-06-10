@@ -4,10 +4,15 @@ services:
       context: .
       dockerfile: Dockerfile.ci
     command: sh -c "bundle exec rake db:create db:migrate && bundle exec rake assets:precompile && bundle exec rspec spec/integration"
+    volumes:
+      - .:/app
+      - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
       paperless-ngx:
+        condition: service_healthy
+      twenty-server:
         condition: service_healthy
     environment:
       RAILS_ENV: test
@@ -15,6 +20,9 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/docuseal_test
       PAPERLESS_NGX_URL: http://paperless-ngx:8000
       PAPERLESS_NGX_TOKEN: ""
+      TWENTY_CRM_URL: http://twenty-server:3000
+      TWENTY_CRM_API_KEY: ""
+      TWENTY_CRM_FILE_FIELD_METADATA_ID: ""
 
   postgres:
     image: postgres:18
@@ -39,8 +47,6 @@ services:
     image: ghcr.io/paperless-ngx/paperless-ngx:latest
     depends_on:
       - paperless-redis
-    ports:
-      - "8000:8000"
     environment:
       PAPERLESS_REDIS: redis://paperless-redis:6379
       PAPERLESS_SECRET_KEY: test-secret-for-e2e-testing
@@ -57,3 +63,72 @@ services:
     tmpfs:
       - /usr/src/paperless/data
       - /usr/src/paperless/media
+
+  twenty-server:
+    image: twentycrm/twenty:latest
+    user: root
+    environment:
+      NODE_PORT: 3000
+      NODE_ENV: development
+      PG_DATABASE_URL: postgres://postgres:postgres@twenty-db:5432/default
+      SERVER_URL: http://twenty-server:3000
+      REDIS_URL: redis://twenty-redis:6379
+      ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItZTJl
+      STORAGE_TYPE: local
+    depends_on:
+      twenty-db:
+        condition: service_healthy
+      twenty-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    tmpfs:
+      - /app/packages/twenty-server/.local-storage
+
+  twenty-worker:
+    image: twentycrm/twenty:latest
+    user: root
+    command: ["yarn", "worker:prod"]
+    environment:
+      NODE_ENV: development
+      PG_DATABASE_URL: postgres://postgres:postgres@twenty-db:5432/default
+      SERVER_URL: http://twenty-server:3000
+      REDIS_URL: redis://twenty-redis:6379
+      ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItZTJl
+      STORAGE_TYPE: local
+      DISABLE_DB_MIGRATIONS: "true"
+      DISABLE_CRON_JOBS_REGISTRATION: "true"
+    depends_on:
+      twenty-server:
+        condition: service_healthy
+    tmpfs:
+      - /app/packages/twenty-server/.local-storage
+
+  twenty-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: default
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  twenty-redis:
+    image: redis:7
+    command: ["--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /data

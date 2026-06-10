@@ -3,18 +3,17 @@
     <div class="max-w-xl mx-auto">
       <div class="text-center">
         <div class="relative flex flex-col items-center">
-          <%= render 'shared/logo', width: '100', height: '100' %>
-          <h1 class="text-6xl font-bold mt-4 mb-4">
-            DocuSeal
-          </h1>
-          <% if Docuseal.version.present? %>
-            <a href="https://github.com/docusealco/docuseal/releases" target="_blank" class="badge badge-outline badge-lg block mx-auto">
-              v<%= Docuseal.version %>
-            </a>
+          <% account = Account.first %>
+          <% if account&.logo&.attached? %>
+            <img src="<%= url_for(account.logo) %>" alt="<%= account.name %>" class="max-h-24 max-w-xs">
+          <% else %>
+            <%= render 'shared/logo', width: '100', height: '100' %>
           <% end %>
         </div>
         <h2 class="mt-4 mb-16 text-lg text-center text-gray-600">
           A self-hosted and open-source web platform that provides secure and efficient digital document signing and processing.
+          <br>
+          <span class="text-sm">Created by <a href="https://github.com/docusealco/docuseal" target="_blank" class="link link-neutral">DocuSeal</a></span>
         </h2>
       </div>
     </div>
@@ -76,4 +75,4 @@
     </div>
   </div>
 </section>
-<%= render 'shared/attribution', with_counter: true %>
+<%= render 'shared/attribution' %>
