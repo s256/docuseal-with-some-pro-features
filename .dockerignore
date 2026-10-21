@@ -31,4 +31,8 @@
 .env
 /pg_data
 /.claude
+/.opencode
+/.agents
+/_bmad
+/_bmad-output
 /.git

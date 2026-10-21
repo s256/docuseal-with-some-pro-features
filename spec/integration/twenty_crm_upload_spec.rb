@@ -202,7 +202,9 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
 
     fields = attachment_obj['fields'] || []
     file_field = fields.find { |f| f['name'] == 'file' }
-    file_field&.dig('id')
+    raise "Could not find 'file' field on attachment object in Twenty metadata" unless file_field
+
+    file_field['id']
   end
 
   def create_twenty_company(api_key, name:, domain:)
@@ -240,10 +242,6 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
     @twenty_api_key = create_api_key(access_token: credentials[:access_token])
     @twenty_company_id = create_twenty_company(@twenty_api_key, name: 'E2E Test GmbH', domain: 'e2e-test.local')
     @twenty_file_field_metadata_id = find_file_field_metadata_id(@twenty_api_key)
-
-    # If we couldn't discover the file field ID, use a placeholder — the upload will still test
-    # the API connectivity even if the GraphQL file upload step has issues
-    @twenty_file_field_metadata_id ||= '00000000-0000-0000-0000-000000000000'
 
     # Configure ENV for the upload module
     allow(ENV).to receive(:fetch).and_call_original

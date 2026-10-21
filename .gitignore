@@ -45,3 +45,11 @@ docuseal/*
 .claude/
 docs/*.md
 CLAUDE.md
+
+# AI tooling (local only)
+.agents/
+.opencode/
+_bmad/
+_bmad-output/
+AGENTS.md
+opencode.jsonc
