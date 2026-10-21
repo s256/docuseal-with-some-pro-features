@@ -36,6 +36,7 @@ class ProcessSubmitterRemindersJob
       .where(completed_at: nil, declined_at: nil)
       .where.not(email: [nil, ''])
       .where(submissions: { archived_at: nil })
+      .includes(:submission)
 
     pending_submitters.find_each do |submitter|
       next if submitter.template&.archived_at?

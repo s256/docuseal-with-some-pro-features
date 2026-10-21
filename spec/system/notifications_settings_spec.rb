@@ -122,6 +122,31 @@ RSpec.describe 'Notifications Settings' do
     end
   end
 
+  context 'with pending sign request reminders' do
+    let(:template) { create(:template, submitter_count: 2, account: user.account, author: user) }
+    let(:submission) { create(:submission, :with_submitters, template:, created_by_user: user) }
+    let(:signer) { submission.submitters.find { |s| s.uuid == template.submitters.first['uuid'] } }
+    let(:viewer) { submission.submitters.find { |s| s.uuid == template.submitters.second['uuid'] } }
+
+    before do
+      template.update!(submitters: [template.submitters.first, template.submitters.second.merge('is_viewer' => true)])
+
+      create(:account_config, account: user.account, key: AccountConfig::SUBMITTER_REMINDERS,
+                              value: { 'first_duration' => 'one_hour' })
+
+      signer.update!(name: 'Pending Signer', sent_at: 30.minutes.ago)
+      viewer.update!(name: 'Document Viewer', sent_at: 30.minutes.ago)
+    end
+
+    it 'lists the pending signer but not the viewer' do
+      visit settings_notifications_path
+
+      expect(page).to have_content('Pending Reminders')
+      expect(page).to have_css('table tr', text: 'Pending Signer')
+      expect(page).to have_no_content('Document Viewer')
+    end
+  end
+
   context 'when changes sign request email reminders settings' do
     it 'updates first reminder duration' do
       visit settings_notifications_path

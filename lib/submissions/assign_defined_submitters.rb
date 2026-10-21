@@ -22,6 +22,7 @@ module Submissions
 
         submission.submitters.new(
           account_id: submission.account_id,
+          team_id: submission.team_id,
           uuid: item['uuid'],
           email: item['is_requester'] ? submission.template.author.email : item['email']
         )
@@ -39,6 +40,7 @@ module Submissions
 
         submission.submitters.new(
           account_id: submission.account_id,
+          team_id: submission.team_id,
           uuid: item['uuid'],
           email:
         )

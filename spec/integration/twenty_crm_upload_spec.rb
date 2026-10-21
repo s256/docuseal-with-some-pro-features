@@ -194,11 +194,15 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
       req.options.timeout = 10
     end
 
+    unless response.success?
+      raise "Twenty metadata objects request failed: HTTP #{response.status} #{response.body.to_s.truncate(200)}"
+    end
+
     objects_list = JSON.parse(response.body)
     objects_list = objects_list['data'] if objects_list.is_a?(Hash) && objects_list.key?('data')
 
     attachment_obj = objects_list.find { |o| o['nameSingular'] == 'attachment' }
-    return nil unless attachment_obj
+    raise "Could not find 'attachment' object in Twenty metadata" unless attachment_obj
 
     fields = attachment_obj['fields'] || []
     file_field = fields.find { |f| f['name'] == 'file' }
