@@ -4,6 +4,8 @@
 
 This fork adds features that are not part of the opensource version of DocuSeal, making them available for self-hosted deployments under the same AGPL-3.0 license.
 
+Currently based on upstream DocuSeal **3.3.3** (fork release `3.3.3-fork.1`).
+
 Disclaimer:
 
 I never had any access to the Pro Version and I have no idea how DocuSeal LLC implemented these features. I don't even think that "white-room copy" would be the right description here.
@@ -38,13 +40,14 @@ This fork implements team-based access control with two roles:
 - Create multiple teams per account (Settings > Teams)
 - Assign users to teams with role selection
 - Editors are scoped to their team — they only see templates, submissions, and folders belonging to their team
+- Submissions created through a template's public share link and templates created via MCP inherit the team, so editors see them too
 - Admins can move entire folders (with all templates and submissions) to another team via the folder edit modal
 - API tokens respect the user's role and team membership
 - Migrations handle both greenfield installs and existing deployments (auto-creates a "Default" team and backfills)
 
 ## Automated Reminders
 
-Reminder emails are sent to pending signers on a configurable schedule.
+Reminder emails are sent to pending signers on a configurable schedule. Viewer parties (recipients who only receive a copy to view, see upstream 3.3+) never get reminders, since they have nothing to sign.
 
 **Configuration:**
 - Set reminder interval (e.g., every 2 days) in Settings > Notifications
@@ -135,7 +138,7 @@ Pre-built images are published to GitHub Container Registry on every release tag
 
 ```
 ghcr.io/s256/docuseal-with-some-pro-features:latest
-ghcr.io/s256/docuseal-with-some-pro-features:2.5.3-fork.2
+ghcr.io/s256/docuseal-with-some-pro-features:3.3.3-fork.1
 ```
 
 Images are signed with [cosign](https://github.com/sigstore/cosign) and include an SBOM and build provenance attestation.
@@ -200,7 +203,8 @@ All features from the base DocuSeal OSS are included:
 
 - PDF form fields builder (WYSIWYG)
 - 12 field types (Signature, Date, File, Checkbox, etc.)
-- Multiple submitters per document
+- Multiple submitters per document, including view-only parties
+- PDF and DOCX upload, document editor
 - Automated emails via SMTP
 - File storage on disk or S3/GCS/Azure
 - Automatic PDF eSignature and verification
