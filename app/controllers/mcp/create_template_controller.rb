@@ -37,6 +37,7 @@ module Mcp
       @template = Template.new(
         account:,
         author: current_user,
+        team_id: current_user.team_id,
         folder: account.default_template_folder,
         source: :mcp,
         name: mcp_params['name'].to_s.presence || 'New Template',

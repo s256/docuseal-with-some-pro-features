@@ -7,6 +7,7 @@ module SubmitterReminders
   def next_reminder_at(submitter, reminder_config)
     return nil unless reminder_config&.value.is_a?(Hash)
     return nil if submitter.completed_at? || submitter.declined_at?
+    return nil if submitter.viewer?
     return nil if submitter.submission.archived_at?
     return nil if submitter.template&.archived_at?
     return nil unless submitter.sent_at

@@ -75,6 +75,7 @@ module Submitters
     def assign_submission_attributes(submitter, template, ip:, user_agent:, source: :link, resubmit_submitter: nil)
       submitter.assign_attributes(
         uuid: first_submitter_uuid(template),
+        team_id: template.team_id,
         ip:,
         ua: user_agent,
         values: resubmit_submitter&.preferences&.fetch('default_values', nil) || {},
@@ -92,6 +93,7 @@ module Submitters
 
       submitter.submission ||= Submission.new(template:,
                                               account_id: template.account_id,
+                                              team_id: template.team_id,
                                               template_submitters: template.submitters,
                                               expire_at: Templates.build_default_expire_at(template),
                                               submitters: [submitter],
