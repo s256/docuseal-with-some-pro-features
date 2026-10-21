@@ -36,9 +36,7 @@ module Api
     end
 
     def update
-      if (folder_name = params[:folder_name] || params.dig(:template, :folder_name))
-        @template.folder = TemplateFolders.find_or_create_by_name(current_user, folder_name)
-      end
+      maybe_assign_folder(@template)
 
       Array.wrap(params[:roles].presence || params.dig(:template, :roles).presence).each_with_index do |role, index|
         if (item = @template.submitters[index])
@@ -64,7 +62,7 @@ module Api
         WebhookUrls.enqueue_events(@template, 'template.archived')
       end
 
-      TemplateVersions.find_or_create_for(@template, author: current_user) if params[:revision].present?
+      maybe_create_template_version(@template)
 
       render json: @template.as_json(only: %i[id updated_at])
     end
@@ -82,6 +80,20 @@ module Api
     end
 
     private
+
+    def maybe_assign_folder(template)
+      folder_name = params[:folder_name] || params.dig(:template, :folder_name)
+
+      return unless folder_name
+
+      template.folder = TemplateFolders.find_or_create_by_name(current_user, folder_name)
+    end
+
+    def maybe_create_template_version(template)
+      return if params[:revision].blank?
+
+      TemplateVersions.find_or_create_for(template, author: current_user)
+    end
 
     def preload_relations(templates)
       schema_documents =

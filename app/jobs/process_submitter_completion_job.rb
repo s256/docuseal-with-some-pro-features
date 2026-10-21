@@ -36,13 +36,7 @@ class ProcessSubmitterCompletionJob
 
       enqueue_completed_emails(submitter)
 
-      if Submissions::UploadToPaperless.configured?
-        UploadToPaperlessJob.perform_async('submission_id' => submitter.submission_id)
-      end
-
-      if Submissions::UploadToTwenty.configured?
-        UploadToTwentyJob.perform_async('submission_id' => submitter.submission_id)
-      end
+      enqueue_integration_uploads(submitter)
     end
 
     create_completed_documents!(submitter)
@@ -55,6 +49,16 @@ class ProcessSubmitterCompletionJob
     end
 
     enqueue_completed_webhooks(submitter, is_last:)
+  end
+
+  def enqueue_integration_uploads(submitter)
+    if Submissions::UploadToPaperless.configured?
+      UploadToPaperlessJob.perform_async('submission_id' => submitter.submission_id)
+    end
+
+    return unless Submissions::UploadToTwenty.configured?
+
+    UploadToTwentyJob.perform_async('submission_id' => submitter.submission_id)
   end
 
   def create_completed_submitter!(submitter)
