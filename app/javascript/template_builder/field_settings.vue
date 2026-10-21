@@ -452,7 +452,7 @@
     class="pb-0.5 mt-0.5"
   >
   <li
-    v-if="['text', 'number', 'date', 'select', 'heading', 'cells'].includes(field.type)"
+    v-if="['text', 'number', 'date', 'select', 'heading', 'cells'].includes(field.type) || (['radio', 'multiple'].includes(field.type) && field.areas?.every((a) => !a.option_uuid))"
     class="field-settings-font"
   >
     <label
@@ -484,7 +484,7 @@
     </label>
   </li>
   <li
-    v-if="withCondition && field.type != 'stamp' && field.type != 'heading'"
+    v-if="withCondition && (withConditions || nativePlatform !== 'ios') && field.type != 'stamp' && field.type != 'heading'"
     class="field-settings-condition"
   >
     <label
@@ -500,7 +500,7 @@
     </label>
   </li>
   <li
-    v-if="field.type == 'number'"
+    v-if="(field.type == 'number' || field.type == 'date' || field.preferences?.formula) && (withFormula || nativePlatform !== 'ios')"
     class="field-settings-formula"
   >
     <label
@@ -610,7 +610,7 @@ export default {
     IconTypography,
     IconX
   },
-  inject: ['template', 't', 'dateFormats', 'locale'],
+  inject: ['template', 't', 'dateFormats', 'locale', 'withFormula', 'withConditions', 'nativePlatform'],
   props: {
     field: {
       type: Object,
@@ -745,6 +745,7 @@ export default {
         '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$': 'email',
         '^https?://.*': 'url',
         '^[0-9]{5}(?:-[0-9]{4})?$': 'zip',
+        '^[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]){11,30}$': 'iban',
         '^[0-9]+$': 'numbers_only',
         '^[a-zA-Z]+$': 'letters_only'
       }
@@ -830,7 +831,8 @@ export default {
       } else if (format === 'percent') {
         return `${number}%`
       } else if (format === 'percent_space') {
-        return `${String(number).replace('.', ',')} %`
+        // eslint-disable-next-line no-irregular-whitespace
+        return `${String(number).replace('.', ',')} %`
       } else {
         return number
       }

@@ -8,6 +8,7 @@ module Submitters
     VARIABLE_REGEXP = /\{\{?(\w+)\}\}?/
     PHONE_REGEXP = /[+\d()\s-]+/
     NONEDITABLE_FIELD_TYPES = %w[stamp heading strikethrough].freeze
+    REQUIRED_FIELD_TYPES = %w[payment kba verification].freeze
 
     STRFTIME_MAP = {
       'hour' => '%-k',
@@ -32,7 +33,11 @@ module Submitters
 
       submitter.submission.save!
 
-      ProcessSubmitterCompletionJob.perform_async('submitter_id' => submitter.id) if submitter.completed_at?
+      if submitter.completed_at?
+        is_last = Submissions.maybe_update_completed_at(submitter.submission)
+
+        ProcessSubmitterCompletionJob.perform_async('submitter_id' => submitter.id, 'is_last' => is_last)
+      end
 
       submitter
     end
@@ -48,10 +53,6 @@ module Submitters
       ApplicationRecord.transaction do
         reason_field = maybe_set_signature_reason!(values, submitter, params)
         validate_values!(reason_field ? values.except(reason_field['uuid']) : values, submitter, params, request)
-
-        if (touch_attachment_uuid = params[:touch_attachment_uuid].presence)
-          ActiveStorage::Attachment.where(uuid: touch_attachment_uuid, record: submitter).touch_all(:created_at)
-        end
 
         if params[:completed] == 'true'
           maybe_invite_via_field(submitter, request)
@@ -91,7 +92,9 @@ module Submitters
       required_field_uuids_acc.each do |uuid|
         next if submitter.values[uuid].present?
 
-        raise RequiredFieldError, uuid if validate_required
+        if validate_required || submitter.submission.fields_uuid_index.dig(uuid, 'type').in?(REQUIRED_FIELD_TYPES)
+          raise RequiredFieldError, uuid
+        end
 
         Rollbar.warning("Required field #{submitter.id}: #{uuid}") if defined?(Rollbar)
       end
@@ -110,7 +113,7 @@ module Submitters
       end
 
       reason_field = submitter.submission.template_fields.find do |e|
-        e['uuid'] == reason_field_uuid && e['submitter_uuid'] == submitter.uuid
+        e['uuid'] == reason_field_uuid
       end
 
       if reason_field
@@ -216,9 +219,20 @@ module Submitters
             submitter.values
           end
 
-        formula = normalize_formula(formula, submitter.submission, submission_values:)
+        values = submission_values.merge(acc.compact_blank)
 
-        acc[field['uuid']] = calculate_formula_value(formula, submission_values.merge(acc.compact_blank))
+        acc[field['uuid']] =
+          if field['type'] == 'text'
+            eval_text_formula_value(formula, values, submitter.submission)
+          else
+            normalized_formula = normalize_formula(formula, submitter.submission, submission_values:)
+
+            if field['type'] == 'date'
+              calculate_date_formula_value(normalized_formula, values, submitter.submission)
+            else
+              calculate_formula_value(normalized_formula, values, submitter.submission)
+            end
+          end
       end
 
       computed_values.compact_blank
@@ -242,8 +256,16 @@ module Submitters
       end
     end
 
-    def calculate_formula_value(_formula, _values)
+    def calculate_formula_value(_formula, _values, _submission)
       0
+    end
+
+    def calculate_date_formula_value(_formula, _values, _submission)
+      nil
+    end
+
+    def eval_text_formula_value(_formula, _values, _submission)
+      ''
     end
 
     def replace_current_date_placeholders(submitter)
@@ -282,7 +304,10 @@ module Submitters
 
       attachments_index =
         if has_document_conditions
-          Submissions.filtered_conditions_schema(submission).index_by { |i| i['attachment_uuid'] }
+          submitters_values = merge_submitters_values(submitter)
+
+          Submissions.filtered_conditions_schema(submission, values: submitters_values)
+                     .index_by { |i| i['attachment_uuid'] }
         end
 
       submission.template_fields.each do |field|
@@ -291,8 +316,7 @@ module Submitters
         required_field_uuids_acc.add(field['uuid']) if required_field_uuids_acc && required_editable_field?(field)
 
         if has_document_conditions && !check_field_areas_attachments(field, attachments_index)
-          submitter.values.delete(field['uuid'])
-          required_field_uuids_acc&.delete(field['uuid'])
+          delete_field_value!(field, submitter, submitters_values, required_field_uuids_acc)
         end
 
         if has_other_submitters && !submitters_values &&
@@ -301,12 +325,17 @@ module Submitters
         end
 
         unless check_field_conditions(submitters_values || submitter.values, field, submission.fields_uuid_index)
-          submitter.values.delete(field['uuid'])
-          required_field_uuids_acc&.delete(field['uuid'])
+          delete_field_value!(field, submitter, submitters_values, required_field_uuids_acc)
         end
       end
 
       submitter.values
+    end
+
+    def delete_field_value!(field, submitter, submitters_values = nil, required_field_uuids_acc = nil)
+      submitter.values.delete(field['uuid'])
+      submitters_values&.delete(field['uuid'])
+      required_field_uuids_acc&.delete(field['uuid'])
     end
 
     def submission_has_document_conditions?(submission)
@@ -327,6 +356,7 @@ module Submitters
 
     def merge_submitters_values(submitter)
       submitter.submission.submitters
+               .reject { |sub| sub.uuid == submitter.uuid }
                .reduce({}) { |acc, sub| acc.merge(sub.values) }
                .merge(submitter.values)
     end
@@ -464,7 +494,7 @@ module Submitters
 
         submission.submitters.create!(uuid: s['uuid'], email:, phone:, account_id: submitter.account_id)
 
-        SubmissionEvents.create_with_tracking_data(submitter, 'invite_party', request, { uuid: submitter.uuid })
+        SubmissionEvents.create_with_tracking_data(submitter, 'invite_party', request, { uuid: s['uuid'] })
 
         is_invited = true
       end

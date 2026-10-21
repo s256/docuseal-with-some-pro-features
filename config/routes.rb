@@ -29,7 +29,7 @@ Rails.application.routes.draw do
     resources :submitter_email_clicks, only: %i[create]
     resources :submitter_form_views, only: %i[create]
     resources :submitters, only: %i[index show update]
-    resources :submissions, only: %i[index show create destroy] do
+    resources :submissions, only: %i[index show create update destroy] do
       resources :documents, only: %i[index], controller: 'submission_documents'
       collection do
         resources :init, only: %i[create], controller: 'submissions'
@@ -62,9 +62,9 @@ Rails.application.routes.draw do
   resources :encrypted_user_configs, only: %i[destroy]
   resources :timestamp_server, only: %i[create] unless Docuseal.multitenant?
   resources :dashboard, only: %i[index]
+  resources :search, only: %i[index]
   resources :setup, only: %i[index create]
   resource :newsletter, only: %i[show update]
-  resources :enquiries, only: %i[create]
   resources :users, only: %i[new create edit update destroy] do
     resource :send_reset_password, only: %i[update], controller: 'users_send_reset_password'
   end
@@ -77,6 +77,7 @@ Rails.application.routes.draw do
     resources :events, only: %i[index], controller: 'submission_events'
     resources :download, only: %i[index], controller: 'submissions_download'
     resources :resend_email, only: %i[create], controller: 'submissions_resend_email'
+    get ':tab', action: :show, on: :member, as: :tab, constraints: { tab: /recipients/ }
   end
   resources :submitters, only: %i[edit update]
   resources :console_redirect, only: %i[index]
@@ -95,6 +96,7 @@ Rails.application.routes.draw do
     resource :templates_upload, only: %i[show], path: 'new'
   end
   resources :templates_archived, only: %i[index], path: 'templates/archived'
+  resources :templates_shared, only: %i[index], path: 'templates/shared'
   resources :folders, only: %i[show edit update destroy], controller: 'template_folders'
   resources :template_sharings_testing, only: %i[create]
   resources :templates, only: %i[index], controller: 'templates_dashboard'
@@ -103,6 +105,9 @@ Rails.application.routes.draw do
     resources :clone, only: %i[new create], controller: 'templates_clone'
     resource :debug, only: %i[show], controller: 'templates_debug' if Rails.env.development?
     resources :documents, only: %i[index create], controller: 'template_documents'
+    resources :documents_modify, only: %i[create], controller: 'template_documents_modify'
+    resources :documents_page_objects, only: %i[index], controller: 'template_documents_page_objects'
+    resources :documents_crop, only: %i[index create], controller: 'template_documents_crop'
     resources :clone_and_replace, only: %i[create], controller: 'templates_clone_and_replace'
     resources :detect_fields, only: %i[create], controller: 'templates_detect_fields' unless Docuseal.multitenant?
     resources :restore, only: %i[create], controller: 'templates_restore'
@@ -142,7 +147,8 @@ Rails.application.routes.draw do
     get :completed
   end
 
-  resource :resubmit_form, controller: 'start_form', only: :update
+  resource :resubmit_form, controller: 'start_form_resubmit', only: :update
+  resources :start_form_self, only: :update
   resource :submit_form_email_2fa, only: %i[create update]
   resources :start_form_email_2fa_send, only: :create
 
@@ -158,6 +164,10 @@ Rails.application.routes.draw do
     resources :delegate, only: %i[create], controller: 'submit_form_delegate'
     resources :invite, only: %i[create], controller: 'submit_form_invite'
     resources :metadata, only: %i[index], controller: 'submit_form_metadata'
+    resource :click_email, only: %i[create], controller: 'submit_form_click_email'
+    resources :view, only: %i[create], controller: 'submit_form_view'
+    resources :upload, only: %i[create], controller: 'submit_form_upload'
+    resources :prefill_attachments, only: %i[create], controller: 'submit_form_prefill_attachments'
     resources :debug, only: %i[index], controller: 'submissions_debug' if Rails.env.development?
     get :completed
     get :delegated
@@ -174,9 +184,14 @@ Rails.application.routes.draw do
 
   resources :submitters, only: %i[] do
     resources :download, only: %i[index], controller: 'submitters_download', constraints: { submitter_id: /\d+/ }
-    resources :download, only: %i[index], controller: 'submit_form_completed_download'
     resources :send_email, only: %i[create], controller: 'submitters_send_email'
   end
+
+  resources :submitters, only: %i[], param: 'slug' do
+    resources :download, only: %i[index], controller: 'submit_form_completed_download'
+  end
+
+  resources :settings, only: %i[index]
 
   scope '/settings', as: :settings do
     unless Docuseal.multitenant?
@@ -189,7 +204,7 @@ Rails.application.routes.draw do
       resources :api, only: %i[index create], controller: 'api_settings'
       resource :reveal_access_token, only: %i[show create], controller: 'reveal_access_token'
     end
-    resources :email, only: %i[index create], controller: 'email_smtp_settings'
+    resources :email, only: %i[index create destroy], controller: 'email_smtp_settings'
     resources :sso, only: %i[index], controller: 'sso_settings'
     resources :notifications, only: %i[index create], controller: 'notifications_settings'
     resources :submitter_reminders, only: [:destroy], controller: 'submitter_reminders'
