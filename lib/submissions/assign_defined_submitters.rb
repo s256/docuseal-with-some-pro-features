@@ -10,6 +10,8 @@ module Submissions
       assign_defined_submitters(submission)
       assign_linked_submitters(submission)
 
+      Submissions::CreateFromSubmitters.assign_submitters_is_viewer(submission)
+
       submission
     end
 
@@ -20,6 +22,7 @@ module Submissions
 
         submission.submitters.new(
           account_id: submission.account_id,
+          team_id: submission.team_id,
           uuid: item['uuid'],
           email: item['is_requester'] ? submission.template.author.email : item['email']
         )
@@ -37,6 +40,7 @@ module Submissions
 
         submission.submitters.new(
           account_id: submission.account_id,
+          team_id: submission.team_id,
           uuid: item['uuid'],
           email:
         )

@@ -44,4 +44,13 @@ docuseal/*
 
 .claude/
 docs/*.md
+!docs/UPSTREAM_SYNC.md
 CLAUDE.md
+
+# AI tooling (local only)
+.agents/
+.opencode/
+_bmad/
+_bmad-output/
+AGENTS.md
+opencode.jsonc

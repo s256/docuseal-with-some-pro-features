@@ -116,10 +116,19 @@ RSpec.describe Submissions::UploadToTwenty do
     let(:file_id) { 'file-uuid-123' }
     let(:attachment_id) { 'attachment-uuid-456' }
 
+    let(:upload_url) { "#{twenty_url}/files/direct-upload/#{file_id}?token=signed" }
+
     before do
-      upload_response = { data: { uploadFilesFieldFile: { id: file_id, url: 'https://cdn.example.com/file.pdf' } } }
+      create_response = { data: { createFileUpload: { fileId: file_id, uploadUrl: upload_url,
+                                                      contentType: 'application/pdf' } } }
+      complete_response = { data: { completeFileUpload: { id: file_id } } }
       stub_request(:post, "#{twenty_url}/metadata")
-        .to_return(status: 200, body: upload_response.to_json)
+        .with { |req| JSON.parse(req.body)['query'].include?('createFileUpload') }
+        .to_return(status: 200, body: create_response.to_json)
+      stub_request(:post, "#{twenty_url}/metadata")
+        .with { |req| JSON.parse(req.body)['query'].include?('completeFileUpload') }
+        .to_return(status: 200, body: complete_response.to_json)
+      stub_request(:put, upload_url).to_return(status: 204)
 
       attach_response = { data: { createAttachment: { id: attachment_id } } }
       stub_request(:post, "#{twenty_url}/rest/attachments")
@@ -141,11 +150,75 @@ RSpec.describe Submissions::UploadToTwenty do
       it 'uploads the document and creates attachment linked to the company' do
         result = described_class.call(submission)
 
-        expect(WebMock).to have_requested(:post, "#{twenty_url}/metadata")
-          .with(headers: { 'Authorization' => "Bearer #{twenty_api_key}" })
+        expect(WebMock).to(have_requested(:post, "#{twenty_url}/metadata")
+          .with(headers: { 'Authorization' => "Bearer #{twenty_api_key}" }) do |req|
+            body = JSON.parse(req.body)
+            body['query'].include?('createFileUpload') &&
+              body['variables'] == { 'filename' => 'combined-result.pdf',
+                                     'size' => Rails.root.join('spec/fixtures/sample-document.pdf').size,
+                                     'fileFolder' => 'FilesField',
+                                     'fieldMetadataId' => twenty_field_metadata_id }
+          end)
+        expect(WebMock).to(have_requested(:put, upload_url)
+          .with { |req| req.headers['Authorization'].nil? && req.headers['Content-Type'] == 'application/pdf' })
+        expect(WebMock).to(have_requested(:post, "#{twenty_url}/metadata")
+          .with { |req| JSON.parse(req.body)['variables'] == { 'fileId' => file_id } })
         expect(WebMock).to(have_requested(:post, "#{twenty_url}/rest/attachments")
           .with { |req| JSON.parse(req.body)['targetCompanyId'] == company_id })
         expect(result).to include(attachment_id)
+      end
+    end
+
+    context 'when Twenty predates direct upload (< 2.19)' do
+      before do
+        submission.submitters.first.update!(metadata: { 'twenty_company_id' => company_id })
+
+        WebMock.reset!
+        missing_field = { errors: [{ message: 'Cannot query field "createFileUpload" on type "Mutation".' }] }
+        stub_request(:post, "#{twenty_url}/metadata")
+          .with(headers: { 'Content-Type' => 'application/json' })
+          .to_return(status: 400, body: missing_field.to_json)
+        legacy_response = { data: { uploadFilesFieldFile: { id: file_id, url: 'https://cdn.example.com/file.pdf' } } }
+        stub_request(:post, "#{twenty_url}/metadata")
+          .with(headers: { 'Content-Type' => %r{\Amultipart/form-data} })
+          .to_return(status: 200, body: legacy_response.to_json)
+        stub_request(:post, "#{twenty_url}/rest/attachments")
+          .to_return(status: 201, body: { data: { createAttachment: { id: attachment_id } } }.to_json)
+
+        blob = ActiveStorage::Blob.create_and_upload!(
+          io: Rails.root.join('spec/fixtures/sample-document.pdf').open,
+          filename: 'combined-result.pdf',
+          content_type: 'application/pdf'
+        )
+        ActiveStorage::Attachment.create!(blob:, name: 'combined_document', record: submission)
+      end
+
+      it 'falls back to the multipart uploadFilesFieldFile mutation' do
+        result = described_class.call(submission)
+
+        expect(WebMock).to(have_requested(:post, "#{twenty_url}/metadata")
+          .with { |req| req.body.include?('uploadFilesFieldFile') && req.body.include?('%PDF') })
+        expect(result).to include(attachment_id)
+      end
+    end
+
+    context 'when the storage PUT fails' do
+      before do
+        submission.submitters.first.update!(metadata: { 'twenty_company_id' => company_id })
+        stub_request(:put, upload_url).to_return(status: 403, body: 'expired')
+
+        blob = ActiveStorage::Blob.create_and_upload!(
+          io: Rails.root.join('spec/fixtures/sample-document.pdf').open,
+          filename: 'combined-result.pdf',
+          content_type: 'application/pdf'
+        )
+        ActiveStorage::Attachment.create!(blob:, name: 'combined_document', record: submission)
+      end
+
+      it 'raises an UploadError and creates no attachment' do
+        expect { described_class.call(submission) }
+          .to raise_error(Submissions::UploadToTwenty::UploadError, /storage upload failed \(HTTP 403\)/)
+        expect(WebMock).not_to have_requested(:post, "#{twenty_url}/rest/attachments")
       end
     end
 
@@ -231,7 +304,7 @@ RSpec.describe Submissions::UploadToTwenty do
       it 'uploads both documents' do
         described_class.call(submission)
 
-        expect(WebMock).to have_requested(:post, "#{twenty_url}/metadata").twice
+        expect(WebMock).to have_requested(:put, upload_url).twice
         expect(WebMock).to have_requested(:post, "#{twenty_url}/rest/attachments").twice
       end
     end

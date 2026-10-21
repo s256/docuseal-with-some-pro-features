@@ -69,8 +69,8 @@
               :attachments-index="attachmentsIndex"
             />
             <FieldArea
-              v-else-if="item.type === 'formula_area' && isMathLoaded"
-              :model-value="calculateFormula(item.field)"
+              v-else-if="item.type === 'formula_area' && (isMathLoaded || item.field.type === 'text')"
+              :model-value="item.field.type === 'text' ? evalTextFormula(item.field) : calculateFormula(item.field)"
               :is-inline-size="isInlineSize"
               :field="item.field"
               :area="item.area"
@@ -124,6 +124,11 @@ export default {
       type: Array,
       required: false,
       default: () => []
+    },
+    fieldsUuidIndex: {
+      type: Object,
+      required: false,
+      default: () => ({})
     },
     values: {
       type: Object,
@@ -195,7 +200,7 @@ export default {
     },
     isMobileContainer: FieldAreas.computed.isMobileContainer,
     isInlineSize: FieldAreas.computed.isInlineSize,
-    fieldsUuidIndex () {
+    formulaFieldsUuidIndex () {
       return this.formulaFields.reduce((acc, field) => {
         acc[field.uuid] = field
 
@@ -289,6 +294,8 @@ export default {
   methods: {
     normalizeFormula: FormulaAreas.methods.normalizeFormula,
     calculateFormula: FormulaAreas.methods.calculateFormula,
+    dateFormulaValue: FormulaAreas.methods.dateFormulaValue,
+    evalTextFormula: FormulaAreas.methods.evalTextFormula,
     scrollInContainer: FieldAreas.methods.scrollInContainer,
     scrollIntoArea: FieldAreas.methods.scrollIntoArea,
     scrollIntoField: FieldAreas.methods.scrollIntoField,

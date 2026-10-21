@@ -4,6 +4,8 @@
 
 This fork adds features that are not part of the opensource version of DocuSeal, making them available for self-hosted deployments under the same AGPL-3.0 license.
 
+Currently based on upstream DocuSeal **3.3.3** (fork release `3.3.3-fork.1`).
+
 Disclaimer:
 
 I never had any access to the Pro Version and I have no idea how DocuSeal LLC implemented these features. I don't even think that "white-room copy" would be the right description here.
@@ -38,13 +40,14 @@ This fork implements team-based access control with two roles:
 - Create multiple teams per account (Settings > Teams)
 - Assign users to teams with role selection
 - Editors are scoped to their team — they only see templates, submissions, and folders belonging to their team
+- Submissions created through a template's public share link and templates created via MCP inherit the team, so editors see them too
 - Admins can move entire folders (with all templates and submissions) to another team via the folder edit modal
 - API tokens respect the user's role and team membership
 - Migrations handle both greenfield installs and existing deployments (auto-creates a "Default" team and backfills)
 
 ## Automated Reminders
 
-Reminder emails are sent to pending signers on a configurable schedule.
+Reminder emails are sent to pending signers on a configurable schedule. Viewer parties (recipients who only receive a copy to view, see upstream 3.3+) never get reminders, since they have nothing to sign.
 
 **Configuration:**
 - Set reminder interval (e.g., every 2 days) in Settings > Notifications
@@ -69,6 +72,7 @@ Automatically upload completed, fully-signed documents to a [paperless-ngx](http
 - If the combined PDF feature is not enabled, individual per-submitter result PDFs are uploaded instead.
 - Documents are titled `"Template Name - Signer 1, Signer 2"` with the signing completion date.
 - Uploads run as a background job with exponential retry (up to 10 attempts) — they never block the signing flow.
+- Tested against paperless-ngx 2.20, 3.0 and 3.3.
 
 **Configuration (env vars only — no GUI):**
 
@@ -88,6 +92,8 @@ Automatically attach completed, fully-signed documents to company records in [Tw
 - This is designed for workflows where Twenty initiates the signing (e.g., via a Twenty workflow that calls the DocuSeal API with the company ID in the submitter metadata).
 - If no `twenty_company_id` is present in any submitter's metadata, the upload is silently skipped. Other integrations (Paperless-ngx, email) are unaffected.
 - Uploads run as a background job with exponential retry (up to 10 attempts).
+- Files are sent with Twenty's direct upload flow (`createFileUpload` → `PUT` to the returned upload URL → `completeFileUpload`). Twenty v2.39 removed the older `uploadFilesFieldFile` mutation; on instances older than v2.19 the integration falls back to it automatically. Tested against Twenty v2.17, v2.38 and v2.50.
+- If Twenty stores files on S3, the DocuSeal server must be able to reach the pre-signed upload URL that Twenty returns.
 
 **Configuration (env vars):**
 
@@ -118,6 +124,15 @@ curl -s -H "Authorization: Bearer YOUR_KEY" \
 }
 ```
 
+## Integration end-to-end tests
+
+`docker-compose.e2e.yml` runs `spec/integration` against real paperless-ngx and Twenty containers (`:latest` by default). Pin versions to check compatibility with an older instance:
+
+```bash
+docker compose -f docker-compose.e2e.yml run --rm rspec
+TWENTY_VERSION=v2.17.0 PAPERLESS_VERSION=2.20.0 docker compose -f docker-compose.e2e.yml run --rm rspec
+```
+
 ## What's NOT included
 
 These Pro features remain unavailable in this fork (they require significant UI/infrastructure work):
@@ -135,7 +150,7 @@ Pre-built images are published to GitHub Container Registry on every release tag
 
 ```
 ghcr.io/s256/docuseal-with-some-pro-features:latest
-ghcr.io/s256/docuseal-with-some-pro-features:2.5.3-fork.2
+ghcr.io/s256/docuseal-with-some-pro-features:3.3.3-fork.1
 ```
 
 Images are signed with [cosign](https://github.com/sigstore/cosign) and include an SBOM and build provenance attestation.
@@ -200,7 +215,8 @@ All features from the base DocuSeal OSS are included:
 
 - PDF form fields builder (WYSIWYG)
 - 12 field types (Signature, Date, File, Checkbox, etc.)
-- Multiple submitters per document
+- Multiple submitters per document, including view-only parties
+- PDF and DOCX upload, document editor
 - Automated emails via SMTP
 - File storage on disk or S3/GCS/Azure
 - Automatic PDF eSignature and verification

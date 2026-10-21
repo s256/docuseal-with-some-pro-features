@@ -9,6 +9,17 @@ RSpec.describe 'Team Settings' do
     sign_in(current_user)
   end
 
+  it 'navigates to the teams page from the settings menu' do
+    visit settings_profile_index_path
+
+    within('#account_settings_menu') do
+      click_link 'Teams'
+    end
+
+    expect(page).to have_current_path(settings_teams_path)
+    expect(page).to have_css('h1', text: 'Teams')
+  end
+
   context 'when multiple users' do
     let!(:users) { create_list(:user, 2, account:) }
     let!(:other_user) { create(:user) }

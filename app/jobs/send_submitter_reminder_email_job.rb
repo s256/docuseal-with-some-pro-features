@@ -10,6 +10,7 @@ class SendSubmitterReminderEmailJob
 
     return if submitter.completed_at?
     return if submitter.declined_at?
+    return if submitter.viewer?
     return if submitter.submission.archived_at?
     return if submitter.template&.archived_at?
     return unless submitter.email.to_s.include?('@')

@@ -103,15 +103,17 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
 
   def create_and_activate_workspace(access_token)
     workspace_query = <<~GQL
-      mutation SignUpInNewWorkspace {
-        signUpInNewWorkspace {
+      mutation SignUpInNewWorkspace($input: SignUpInNewWorkspaceInput) {
+        signUpInNewWorkspace(input: $input) {
           loginToken { token }
           workspace { id workspaceUrls { subdomainUrl } }
         }
       }
     GQL
 
-    ws_result = graphql_request(workspace_query, token: access_token)
+    # Twenty >= 2.50 requires the workspace name at sign-up (BAD_USER_INPUT otherwise)
+    ws_result = graphql_request(workspace_query, variables: { input: { displayName: 'DocuSeal E2E Test' } },
+                                                 token: access_token)
     ws_data = ws_result.dig('data', 'signUpInNewWorkspace')
     raise "Twenty workspace creation failed: #{ws_result}" unless ws_data
 
@@ -194,15 +196,21 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
       req.options.timeout = 10
     end
 
+    unless response.success?
+      raise "Twenty metadata objects request failed: HTTP #{response.status} #{response.body.to_s.truncate(200)}"
+    end
+
     objects_list = JSON.parse(response.body)
     objects_list = objects_list['data'] if objects_list.is_a?(Hash) && objects_list.key?('data')
 
     attachment_obj = objects_list.find { |o| o['nameSingular'] == 'attachment' }
-    return nil unless attachment_obj
+    raise "Could not find 'attachment' object in Twenty metadata" unless attachment_obj
 
     fields = attachment_obj['fields'] || []
     file_field = fields.find { |f| f['name'] == 'file' }
-    file_field&.dig('id')
+    raise "Could not find 'file' field on attachment object in Twenty metadata" unless file_field
+
+    file_field['id']
   end
 
   def create_twenty_company(api_key, name:, domain:)
@@ -240,10 +248,6 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
     @twenty_api_key = create_api_key(access_token: credentials[:access_token])
     @twenty_company_id = create_twenty_company(@twenty_api_key, name: 'E2E Test GmbH', domain: 'e2e-test.local')
     @twenty_file_field_metadata_id = find_file_field_metadata_id(@twenty_api_key)
-
-    # If we couldn't discover the file field ID, use a placeholder — the upload will still test
-    # the API connectivity even if the GraphQL file upload step has issues
-    @twenty_file_field_metadata_id ||= '00000000-0000-0000-0000-000000000000'
 
     # Configure ENV for the upload module
     allow(ENV).to receive(:fetch).and_call_original

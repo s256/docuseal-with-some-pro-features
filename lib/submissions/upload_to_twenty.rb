@@ -110,7 +110,87 @@ module Submissions
       filename.gsub(/["\r\n\\]/, '_')
     end
 
+    # Twenty >= 2.19 uploads files directly to storage (createFileUpload -> PUT -> completeFileUpload);
+    # Twenty >= 2.39 removed the multipart uploadFilesFieldFile mutation, which stays as a fallback
+    # for instances older than 2.19.
     def upload_file(tempfile, filename)
+      content = tempfile.read
+
+      direct_upload_file(content, filename)
+    rescue LegacyUploadRequired
+      legacy_upload_file(content, filename)
+    end
+
+    LegacyUploadRequired = Class.new(StandardError)
+
+    CREATE_FILE_UPLOAD_GQL = <<~GQL
+      mutation CreateFileUpload($filename: String!, $size: Float!, $fileFolder: FileFolder!, $fieldMetadataId: String) {
+        createFileUpload(filename: $filename, size: $size, fileFolder: $fileFolder, fieldMetadataId: $fieldMetadataId) {
+          fileId uploadUrl contentType
+        }
+      }
+    GQL
+
+    COMPLETE_FILE_UPLOAD_GQL = <<~GQL
+      mutation CompleteFileUpload($fileId: String!) { completeFileUpload(fileId: $fileId) { id } }
+    GQL
+
+    def direct_upload_file(content, filename)
+      target = metadata_mutation(CREATE_FILE_UPLOAD_GQL,
+                                 { filename:, size: content.bytesize, fileFolder: 'FilesField',
+                                   fieldMetadataId: ENV['TWENTY_CRM_FILE_FIELD_METADATA_ID'] }, # rubocop:disable Style/FetchEnvVar
+                                 'createFileUpload')
+
+      put_to_upload_target(target, content)
+
+      completed = metadata_mutation(COMPLETE_FILE_UPLOAD_GQL, { fileId: target['fileId'] }, 'completeFileUpload')
+
+      completed['id'] || target['fileId']
+    end
+
+    def metadata_mutation(query, variables, field)
+      response = connection.post('/metadata') do |req|
+        req.headers['Authorization'] = "Bearer #{ENV['TWENTY_CRM_API_KEY']}" # rubocop:disable Style/FetchEnvVar
+        req.headers['Content-Type'] = 'application/json'
+        req.body = { query:, variables: }.to_json
+        req.options.timeout = 30
+        req.options.open_timeout = 10
+      end
+
+      data = response.status < 500 ? JSON.parse(response.body.presence || '{}') : {}
+      errors = Array(data['errors']).filter_map { |e| e['message'] }
+
+      raise LegacyUploadRequired if errors.any? { |e| e.include?("Cannot query field \"#{field}\"") }
+
+      result = data.dig('data', field)
+
+      unless response.status < 400 && result
+        raise UploadError, "Twenty CRM #{field} failed (HTTP #{response.status}): #{response.body.to_s.truncate(200)}"
+      end
+
+      result
+    rescue JSON::ParserError
+      raise UploadError, "Twenty CRM #{field} returned invalid JSON (HTTP #{response.status})"
+    end
+
+    def put_to_upload_target(target, content)
+      # uploadUrl is a pre-signed URL (local storage or S3); it must not carry the API key
+      upload_url = URI.join("#{ENV['TWENTY_CRM_URL'].to_s.chomp('/')}/", target['uploadUrl'].to_s).to_s
+
+      response = Faraday.new.put(upload_url) do |req|
+        req.headers['Content-Type'] = target['contentType'].presence || 'application/pdf'
+        req.body = content
+        req.options.timeout = 60
+        req.options.open_timeout = 10
+      end
+
+      return if response.status < 300
+
+      raise UploadError,
+            "Twenty CRM file storage upload failed (HTTP #{response.status}): #{response.body.to_s.truncate(200)}"
+    end
+
+    def legacy_upload_file(content, filename)
       field_metadata_id = ENV['TWENTY_CRM_FILE_FIELD_METADATA_ID'] # rubocop:disable Style/FetchEnvVar
       boundary = "----DocuSealTwentyUpload#{SecureRandom.hex(16)}"
 
@@ -124,7 +204,7 @@ module Submissions
 
       map = { '0' => ['variables.file'] }.to_json
 
-      body = build_graphql_multipart_body(tempfile, filename:, operations:, map:, boundary:)
+      body = build_graphql_multipart_body(content, filename:, operations:, map:, boundary:)
 
       response = connection.post('/metadata') do |req|
         req.headers['Authorization'] = "Bearer #{ENV['TWENTY_CRM_API_KEY']}" # rubocop:disable Style/FetchEnvVar
@@ -174,7 +254,7 @@ module Submissions
       data.dig('data', 'createAttachment', 'id') || data['id']
     end
 
-    def build_graphql_multipart_body(tempfile, filename:, operations:, map:, boundary:)
+    def build_graphql_multipart_body(content, filename:, operations:, map:, boundary:)
       parts = []
 
       parts << "--#{boundary}\r\n"
@@ -190,7 +270,7 @@ module Submissions
       parts << "--#{boundary}\r\n"
       parts << "Content-Disposition: form-data; name=\"0\"; filename=\"#{filename}\"\r\n"
       parts << "Content-Type: application/pdf\r\n\r\n"
-      parts << tempfile.read
+      parts << content
       parts << "\r\n"
 
       parts << "--#{boundary}--\r\n"

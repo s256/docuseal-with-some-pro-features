@@ -1,4 +1,4 @@
-FROM ruby:4.0.1-alpine
+FROM ruby:4.0.5-alpine
 
 ENV RAILS_ENV=test
 ENV NODE_ENV=test
@@ -13,12 +13,14 @@ RUN apk add --no-cache \
     nodejs \
     yarn \
     vips-dev \
+    leptonica \
+    unzip \
     chromium \
     chromium-chromedriver \
-    && wget -O pdfium-linux.tgz "https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-linux-musl-x64.tgz" \
-    && mkdir -p /pdfium && tar -xzf pdfium-linux.tgz -C /pdfium \
+    && wget -O pdfium-linux.zip "https://github.com/docusealco/pdfium-binaries/releases/latest/download/pdfium-musl-$(uname -m).zip" \
+    && unzip -q pdfium-linux.zip -d /pdfium \
     && cp /pdfium/lib/libpdfium.so /usr/lib/ \
-    && rm -rf pdfium-linux.tgz /pdfium
+    && rm -rf pdfium-linux.zip /pdfium
 
 ENV CHROME_BIN=/usr/bin/chromium-browser
 ENV CHROMIUM_FLAGS="--no-sandbox --headless --disable-gpu"

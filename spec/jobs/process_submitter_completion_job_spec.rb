@@ -10,6 +10,8 @@ RSpec.describe ProcessSubmitterCompletionJob do
   before do
     create(:encrypted_config, key: EncryptedConfig::ESIGN_CERTS_KEY,
                               value: GenerateCertificate.call.transform_values(&:to_pem))
+
+    Submissions.maybe_update_completed_at(submitter.submission)
   end
 
   describe '#perform' do
@@ -44,6 +46,61 @@ RSpec.describe ProcessSubmitterCompletionJob do
       expect do
         described_class.new.perform('submitter_id' => 'invalid_id')
       end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    context 'with Paperless-ngx and Twenty CRM configured' do
+      let(:second_party) { {} }
+      let(:second_completed_at) { nil }
+      let(:template) do
+        create(:template, submitter_count: 2, account:, author: user).tap do |t|
+          t.update!(submitters: [t.submitters.first, t.submitters.second.merge(second_party)])
+        end
+      end
+      let(:submission) do
+        create(:submission, template:, created_by_user: user).tap do |s|
+          create(:submitter, submission: s, uuid: template.submitters.second['uuid'], completed_at: second_completed_at)
+        end
+      end
+      let(:submitter) do
+        create(:submitter, submission:, uuid: template.submitters.first['uuid'], completed_at: Time.current)
+      end
+      let(:integration_job_args) { [{ 'submission_id' => submission.id }] }
+
+      before do
+        allow(Submissions::UploadToPaperless).to receive(:configured?).and_return(true)
+        allow(Submissions::UploadToTwenty).to receive(:configured?).and_return(true)
+      end
+
+      context 'when the last signer completes' do
+        let(:second_completed_at) { 1.hour.ago }
+
+        it 'enqueues each upload job once' do
+          described_class.new.perform('submitter_id' => submitter.id)
+
+          expect(UploadToPaperlessJob.jobs.pluck('args')).to eq([integration_job_args])
+          expect(UploadToTwentyJob.jobs.pluck('args')).to eq([integration_job_args])
+        end
+      end
+
+      context 'when the other party is a pending viewer' do
+        let(:second_party) { { 'is_viewer' => true } }
+
+        it 'enqueues each upload job once' do
+          described_class.new.perform('submitter_id' => submitter.id)
+
+          expect(UploadToPaperlessJob.jobs.pluck('args')).to eq([integration_job_args])
+          expect(UploadToTwentyJob.jobs.pluck('args')).to eq([integration_job_args])
+        end
+      end
+
+      context 'when another required signer is still pending' do
+        it 'does not enqueue the upload jobs' do
+          described_class.new.perform('submitter_id' => submitter.id)
+
+          expect(UploadToPaperlessJob.jobs).to be_empty
+          expect(UploadToTwentyJob.jobs).to be_empty
+        end
+      end
     end
   end
 end

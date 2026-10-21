@@ -130,6 +130,41 @@ describe 'Templates API' do
         }.to_json
       end.to change { template.reload.shared_link }.from(true).to(false)
     end
+
+    it 'creates a template version when revision is set' do
+      template
+
+      expect do
+        put "/api/templates/#{template.id}", headers: { 'x-auth-token': author.access_token.token }, params: {
+          name: 'Revised Template',
+          revision: true
+        }.to_json
+      end.to change(TemplateVersion, :count).by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(TemplateVersion.last.template_id).to eq(template.id)
+    end
+
+    it 'does not create a template version without revision' do
+      template
+
+      expect do
+        put "/api/templates/#{template.id}", headers: { 'x-auth-token': author.access_token.token }, params: {
+          name: 'Unrevised Template'
+        }.to_json
+      end.not_to change(TemplateVersion, :count)
+
+      expect(response).to have_http_status(:ok)
+    end
+
+    it 'assigns the folder by folder_name' do
+      put "/api/templates/#{template.id}", headers: { 'x-auth-token': author.access_token.token }, params: {
+        folder_name: 'API Folder'
+      }.to_json
+
+      expect(response).to have_http_status(:ok)
+      expect(template.reload.folder.name).to eq('API Folder')
+    end
   end
 
   describe 'DELETE /api/templates/:id' do
@@ -230,6 +265,7 @@ describe 'Templates API' do
           name: 'sample-document'
         }
       ],
+      variables_schema: template.variables_schema || {},
       shared_link: template.shared_link,
       author_id: author.id,
       archived_at: nil,

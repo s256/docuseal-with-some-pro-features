@@ -197,7 +197,8 @@
           v-else-if="!isCheckboxInput"
           width="100%"
           height="100%"
-          class="max-h-10 opacity-50"
+          class="opacity-50"
+          :style="{ maxHeight: isInlineSize ? '4.4cqmin' : '40px' }"
         />
       </span>
     </div>
@@ -722,6 +723,10 @@ export default {
     },
     startTouchDrag (e) {
       if (e.target !== this.$refs.touchTarget && e.target !== this.$refs.touchValueTarget) {
+        return
+      }
+
+      if (this.inputMode && (this.isValueInput || this.isCheckboxInput || this.isSelectInput)) {
         return
       }
 
