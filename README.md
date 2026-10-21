@@ -72,6 +72,7 @@ Automatically upload completed, fully-signed documents to a [paperless-ngx](http
 - If the combined PDF feature is not enabled, individual per-submitter result PDFs are uploaded instead.
 - Documents are titled `"Template Name - Signer 1, Signer 2"` with the signing completion date.
 - Uploads run as a background job with exponential retry (up to 10 attempts) — they never block the signing flow.
+- Tested against paperless-ngx 2.20, 3.0 and 3.3.
 
 **Configuration (env vars only — no GUI):**
 
@@ -91,6 +92,8 @@ Automatically attach completed, fully-signed documents to company records in [Tw
 - This is designed for workflows where Twenty initiates the signing (e.g., via a Twenty workflow that calls the DocuSeal API with the company ID in the submitter metadata).
 - If no `twenty_company_id` is present in any submitter's metadata, the upload is silently skipped. Other integrations (Paperless-ngx, email) are unaffected.
 - Uploads run as a background job with exponential retry (up to 10 attempts).
+- Files are sent with Twenty's direct upload flow (`createFileUpload` → `PUT` to the returned upload URL → `completeFileUpload`). Twenty v2.39 removed the older `uploadFilesFieldFile` mutation; on instances older than v2.19 the integration falls back to it automatically. Tested against Twenty v2.17, v2.38 and v2.50.
+- If Twenty stores files on S3, the DocuSeal server must be able to reach the pre-signed upload URL that Twenty returns.
 
 **Configuration (env vars):**
 
@@ -119,6 +122,15 @@ curl -s -H "Authorization: Bearer YOUR_KEY" \
     "metadata": { "twenty_company_id": "uuid-of-the-company-in-twenty" }
   }]
 }
+```
+
+## Integration end-to-end tests
+
+`docker-compose.e2e.yml` runs `spec/integration` against real paperless-ngx and Twenty containers (`:latest` by default). Pin versions to check compatibility with an older instance:
+
+```bash
+docker compose -f docker-compose.e2e.yml run --rm rspec
+TWENTY_VERSION=v2.17.0 PAPERLESS_VERSION=2.20.0 docker compose -f docker-compose.e2e.yml run --rm rspec
 ```
 
 ## What's NOT included

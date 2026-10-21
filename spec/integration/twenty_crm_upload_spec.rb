@@ -103,15 +103,17 @@ RSpec.describe 'Twenty CRM document upload', type: :integration do
 
   def create_and_activate_workspace(access_token)
     workspace_query = <<~GQL
-      mutation SignUpInNewWorkspace {
-        signUpInNewWorkspace {
+      mutation SignUpInNewWorkspace($input: SignUpInNewWorkspaceInput) {
+        signUpInNewWorkspace(input: $input) {
           loginToken { token }
           workspace { id workspaceUrls { subdomainUrl } }
         }
       }
     GQL
 
-    ws_result = graphql_request(workspace_query, token: access_token)
+    # Twenty >= 2.50 requires the workspace name at sign-up (BAD_USER_INPUT otherwise)
+    ws_result = graphql_request(workspace_query, variables: { input: { displayName: 'DocuSeal E2E Test' } },
+                                                 token: access_token)
     ws_data = ws_result.dig('data', 'signUpInNewWorkspace')
     raise "Twenty workspace creation failed: #{ws_result}" unless ws_data
 

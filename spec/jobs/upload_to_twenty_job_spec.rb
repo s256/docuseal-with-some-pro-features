@@ -26,9 +26,16 @@ RSpec.describe UploadToTwentyJob do
 
     submission.submitters.first.update!(metadata: { 'twenty_company_id' => company_id })
 
-    upload_response = { data: { uploadFilesFieldFile: { id: 'file-123', url: 'https://cdn.example.com/file.pdf' } } }
+    upload_url = "#{twenty_url}/files/direct-upload/file-123?token=signed"
+    create_response = { data: { createFileUpload: { fileId: 'file-123', uploadUrl: upload_url,
+                                                    contentType: 'application/pdf' } } }
     stub_request(:post, "#{twenty_url}/metadata")
-      .to_return(status: 200, body: upload_response.to_json)
+      .with { |req| JSON.parse(req.body)['query'].include?('createFileUpload') }
+      .to_return(status: 200, body: create_response.to_json)
+    stub_request(:post, "#{twenty_url}/metadata")
+      .with { |req| JSON.parse(req.body)['query'].include?('completeFileUpload') }
+      .to_return(status: 200, body: { data: { completeFileUpload: { id: 'file-123' } } }.to_json)
+    stub_request(:put, upload_url).to_return(status: 204)
 
     attach_response = { data: { createAttachment: { id: 'attachment-456' } } }
     stub_request(:post, "#{twenty_url}/rest/attachments")

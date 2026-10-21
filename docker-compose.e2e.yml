@@ -44,7 +44,7 @@ services:
       - /data
 
   paperless-ngx:
-    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    image: ghcr.io/paperless-ngx/paperless-ngx:${PAPERLESS_VERSION:-latest}
     depends_on:
       - paperless-redis
     environment:
@@ -65,7 +65,7 @@ services:
       - /usr/src/paperless/media
 
   twenty-server:
-    image: twentycrm/twenty:latest
+    image: twentycrm/twenty:${TWENTY_VERSION:-latest}
     user: root
     environment:
       NODE_PORT: 3000
@@ -90,7 +90,7 @@ services:
       - /app/packages/twenty-server/.local-storage
 
   twenty-worker:
-    image: twentycrm/twenty:latest
+    image: twentycrm/twenty:${TWENTY_VERSION:-latest}
     user: root
     command: ["yarn", "worker:prod"]
     environment:
